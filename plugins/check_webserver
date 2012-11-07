@@ -1,0 +1,47 @@
+#!/bin/bash
+
+APACHE_SERVERS=$(ps -u admin -ocmd | grep -E  'httpd( .*|$)'            | grep -v grep | awk '{print $1}' | sort | uniq )
+NGINX_SERVERS=$( ps ax      -ocmd  | grep -E 'nginx.*: master process ' | grep -v grep | awk '{print $4}' | sort | uniq )
+
+for as in $APACHE_SERVERS
+do
+    VERSION=$($as -v     | sed -n  '/Server version:  */{s///;p;q;}')
+    if [ -z "$VERSION" ]
+    then
+          continue
+    fi
+    if expr match "$APACHE_VERSIONS" "<$VERSION>" &>/dev/null
+    then
+          continue
+    fi
+    APACHE_VERSIONS="$APACHE_VERSIONS<$VERSION>"
+done
+
+for ns in $NGINX_SERVERS
+do
+    VERSION=$($ns -v 2>&1 | sed -n '/.* version:  */{s///;p;q}')
+    if [ -z "$VERSION" ]
+    then
+          continue
+    fi
+    if expr match "$NGINX_VERSIONS" "<$VERSION>" &>/dev/null
+    then
+          continue
+    fi
+     NGINX_VERSIONS="$NGINX_VERSIONS<$VERSION>";
+done 
+
+#-- display --#
+
+if [ -z "$APACHE_VERSIONS" ]
+then
+        APACHE_VERSIONS=null
+fi
+
+if [ -z "$NGINX_VERSIONS" ]
+then
+        NGINX_VERSIONS=null
+fi
+
+echo  "[$APACHE_VERSIONS]","[$NGINX_VERSIONS]"
+

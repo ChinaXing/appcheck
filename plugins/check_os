@@ -1,0 +1,14 @@
+#!/bin/bash
+ARCH=$(uname -i)
+OS=$(cat /etc/redhat-release 2>/dev/null| sed 's/Red Hat Enterprise Linux \(Server\|AS\) release *//' )
+KERNEL=$(cat /proc/sys/kernel/osrelease 2>/dev/null)
+
+for i in ARCH OS KERNEL
+do
+    if eval test -z \"\$$i\" 
+    then
+          eval $i=null
+    fi
+done
+
+echo "[$ARCH]","[$OS]","[$KERNEL]"

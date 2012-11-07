@@ -1,0 +1,29 @@
+#!/bin/bash
+#####################################################
+# Author          : yunxing - yunxing.cyx
+# Last modified   : 2011-12-28 16:53
+# Function        : show sysinit statu of machine : on,off,level
+# Usage           : 
+#                    check_sysinit [-h]  init-item
+#                    init-item : snmpd
+#####################################################
+
+LANG=C
+
+if [ $# -lt 1 ]
+then
+	echo "Usage: check_sysinit init-item" 1>&2
+	exit 0
+fi
+if [ "x$1" = "x-h" ]
+then
+	echo "sysinit init-item"
+	exit 0
+fi
+
+str=`/sbin/chkconfig  --list ${1} `
+echo -n "[off:"
+echo "$str" | grep -o '.:off' | awk -F: '{ORS="";print  $1}' | tr -d '\n'
+echo -n " on:"
+echo "$str" | grep -o '.:on' | awk -F: '{ORS="";print  $1}' | tr -d '\n'
+echo  "]"

@@ -1,0 +1,52 @@
+#!/bin/bash
+# -*- vim: set ft=sh -*- #
+#####################################################
+# Author          : yunxing - yunxing.cyx
+# Last modified   : 2012-10-11 08:53
+# Function        : show uptime info 
+# Usage           : 
+#                    check_uptime [-h] option
+#                    option : t d
+#####################################################
+
+LANG=C
+
+if [ $# -lt 1 ] 
+then
+    item=d
+else
+    item=$1
+fi
+
+if [ "x$1" = "x-h" ]
+then
+    echo uptime -[t|d] 
+    echo "      "-t : up days and boot time
+    echo "      "-d : up days
+    exit 0
+fi
+
+if [ $item = "d" ]
+then
+    vlu=$(uptime  | head -1 | awk '{print $3}')
+elif [ $item = "t" ]
+then
+    vlu=$(uptime  | head -1 | awk -F"up |," '{print $2$3}')
+fi
+
+
+if [ $item = "d" ]
+then
+    echo ${vlu:-0}
+    exit 0
+fi
+
+if [ $item = "t" ]
+then
+    echo [${vlu:-NULL}]
+    exit 0
+fi
+
+
+echo [Error:$item]
+exit 0

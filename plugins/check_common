@@ -1,0 +1,88 @@
+#!/bin/bash
+#####################################################
+# Author          : yunxing - yunxing.cyx
+# Last modified   : 2011-12-28 16:53
+# Function        : show common info of machine : cpu,mem,load,net,traffice,qps
+# Usage           : 
+#                    check_common [-h] [now]
+#                    now : get current net traffic
+#####################################################
+
+LANG=C
+
+if [ $# -ge 1 ] 
+then
+	if [ "x$1" = "x-h" ]
+	then
+		echo "-common [now]"
+		exit 0
+	fi
+	now=1
+else
+	now=" -s `date -d '-20 min' +%H:%M:%S`"
+	
+fi
+
+function get_load(){
+        loadavg=$(uptime | sed 's/^.*load average: \([^,][^,]*\),.*$/\1/g')
+}
+
+function get_cpuused(){
+	cpuidle=$(mpstat | tail -2 |awk  '{for(i=1;i<=NF;i++){if ( $i ~ /'%idle'/ ){ getline ; print $i ; }}}');	
+	cpuused=`echo | awk '{print 100-'"$cpuidle"';}'`
+}
+function get_memfree(){
+	memfree=`free  -b | awk 'NR==3{print $4}'`
+}
+function getiowait(){
+	cpuiowait=$(mpstat | tail -2 |awk  '{for(i=1;i<=NF;i++){if ( $i ~ /'%iowait'/ ){ getline ; print $i ; }}}');	
+}
+
+function gettraffic(){
+	traffic=`/usr/bin/sar -n DEV $now  | grep -v sit0 | grep -v lo |grep -v Average |sed -e '/^ *$/d' | tail -1 | awk '{printf "%d,%d",8*$(NF-4),8*$(NF-3)}'`
+	if [ -z "$traffic" ]
+	then
+		traffic='[No-eth0]'
+	fi
+}
+
+function getHTTPDS(){
+	HTTPDS=`ps -eLf | grep -v grep | grep -c '/httpd ' `
+}
+function getJAVAS(){
+	JAVAS=`ps -eLf | grep -v grep | grep -c '/java ' `
+}
+function getESTS(){
+	NETESTS=`netstat -ant  | grep ESTAB -c`
+}
+function getTIMEWAITS(){
+	NETTIMEWAITS=`netstat -ant  | grep TIME_WAIT -c`
+}
+
+function getQPS_RT(){
+	acc_logs=/home/admin/cai/logs/cronolog/`date +%Y/%m/%Y-%m-%d-`taobao-access_log	
+	if [ -f $acc_logs ]
+	then
+		srm=" [`date -d '-1 second ' +%d/%h/%Y:%H:%M:%S` +0800] "
+		QPS=`grep -c -F  "$srm" $acc_logs`
+	else
+		QPS='[NOLOG]'
+	fi
+}
+
+##------- call functions -----------##
+
+get_load
+getQPS_RT
+getESTS
+getTIMEWAITS
+getHTTPDS
+gettraffic
+get_cpuused
+get_memfree
+getiowait
+getJAVAS
+
+
+##------- print result -----------##
+echo $loadavg,$cpuused,$memfree,$cpuiowait,$traffic,$HTTPDS,$JAVAS,$NETESTS,$NETTIMEWAITS,$QPS

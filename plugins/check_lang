@@ -1,0 +1,11 @@
+#!/bin/bash
+LANG=C
+
+lang=$(awk -F= '$1 ~ /^LANG$/ { gsub("\"","",$2); lang=$2}END{print lang}'  /etc/sysconfig/i18n)
+
+if [ -n "$lang" ]
+then
+     echo "[$lang]"
+else
+     echo "[null]"
+fi

@@ -1,0 +1,44 @@
+#!/bin/bash
+#####################################################
+# Author          : yunxing - yunxing.cyx
+# Last modified   : 2011-12-28 16:53
+# Function        : show cpu info 
+# Usage           : 
+#                    check_cpu [-h] option
+#                    option : like idle,nice,sys,iowait,irq and so on..
+#####################################################
+
+
+LANG=C
+
+
+#04:47:47 PM  CPU   %user   %nice    %sys %iowait    %irq   %soft  %steal   %idle    intr/s
+#04:47:19 PM  all    2.18    0.00    2.97    0.21    0.02    0.10    0.00   94.53    257.23
+
+if [ $# -lt 1 ] 
+then
+	echo -n "check_cpu -idle" 1>&2
+	exit 0
+fi
+
+if [ "x$1" = "x-h" ]
+then
+	echo  "cpu -idle" 
+	exit 0
+fi
+
+vlu=$(mpstat | tail -2 |awk  '{for(i=1;i<=NF;i++){if ( $i ~ /'"$1"'/ ){ getline ; print $i ; }}}')
+
+if [ $# -lt 2 ] 
+then
+	echo  "$vlu" 
+else
+	ruslt=$(echo "$vlu > ${2}"| bc)
+
+	if [ $ruslt -eq 1 ]
+	then
+		echo  "[big than ${2}: $vlu]"
+	else
+		echo  "[ok]"
+	fi
+fi

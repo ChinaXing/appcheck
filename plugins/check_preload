@@ -1,0 +1,36 @@
+#!/bin/bash
+#####################################################
+# Author          : yunxing - yunxing.cyx
+# Last modified   : 2011-12-28 16:53
+# Function        : show preload info of app : misecond 
+# Usage           : 
+#                    check_preload [-h] appdir
+#                    appdir : home/admin/${appdir}/bin/preload.sh , eg . wwpartner
+#####################################################
+
+if [ $# -lt 1 ]
+then
+	echo "Usage: check_preload appname"
+	exit 0
+fi
+if [ "x$1" = "x-h" ]
+then
+	echo "preload appname"
+	exit 0
+fi
+appname="$1"
+
+if ! [ -e /home/admin/$appname/bin/preload.sh ]
+then
+	echo  "[no preload]" 
+else
+        tm=`date +%s%N`
+        str=`bash /home/admin/$appname/bin/preload.sh`
+        tm2=`date +%s%N`
+        if [ -n "`echo \"$str\" | grep ' OK '`" ]
+        then
+        	echo  "$((($tm2-$tm)/1000000))"	
+        else
+        	echo  "[FAILED]"
+        fi
+fi

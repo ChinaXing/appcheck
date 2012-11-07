@@ -1,0 +1,23 @@
+#!/bin/bash
+
+JAVA_PROCS=$(/bin/ps ax  -ocmd |grep bin/java  | grep -v grep | awk '{print $1}')
+
+for jp in $JAVA_PROCS
+do
+#      link_path=$(cd ${jp%bin/java} && pwd -P)
+      VERSION=$($jp  -version  2>&1  | sed  -n '/^java version /{s///;s/"//g;p;q;}' 2>/dev/null)
+#      VERSION=${link_path##*/}
+      if test -n "$VERSION" && ! expr match "$JDK_VERSIONS" "<$VERSION>" &>/dev/null
+      then
+            
+            JDK_VERSIONS="$JDK_VERSIONS<$VERSION>"
+      fi
+done
+
+if [ -z "$JDK_VERSIONS" ]
+then
+#     JDK_VERSIONS=$(basename $(readlink /opt/taobao/java 2>/dev/null) 2>/dev/null)
+      JDK_VERSIONS=null
+fi
+
+echo "[$JDK_VERSIONS]"

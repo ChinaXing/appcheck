@@ -1,0 +1,6 @@
+cpus_head="check cpus status"
+load_head="check load average"
+preload_head="check app's state,use preload.sh"
+sysinit_head="check the state of system-inittab"
+proc_head="find out the proc"
+common_head="load--cpuused--mem(free/M)--iowait--traffic([in/out]/s)--thds-HTTPD--thds-JAVA--NET(ESTAB)--NET(TIMEWAIT)--QPS"

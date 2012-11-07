@@ -1,0 +1,36 @@
+#!/bin/bash
+#####################################################
+# Author          : yunxing - yunxing.cyx
+# Last modified   : 2011-12-28 16:53
+# Function        : show proc/threads info of proc ;
+# Usage           : 
+#                    check_proc [ -h ] [-t] process-name
+#                    -t statistic as  threads, default is process
+#                    proccess-name : eg . httpd
+#####################################################
+
+LANG=C
+
+if [ $# -lt 1 ]
+then
+	echo "[Usge: check_proc [t] procname]"
+	exit 0
+fi
+if [ "x$1" = "x-h" ]
+then
+	echo "proc [t] procname, with 't' show threads."
+	exit 0
+fi
+
+if [ "x$1" = "xt" ]
+then
+	rslt=`ps -eLf | grep -v grep | grep -c ${2} | tr -d '\n'`	
+else
+	rslt=`ps ax -ocmd | grep -v grep |grep -v check_proc |  grep ${1} -c | tr -d '\n' `
+fi
+if [ -z "$rslt" ]
+then
+	echo  "[No$1]"
+else
+	echo  "$rslt"
+fi

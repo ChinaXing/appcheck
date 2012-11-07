@@ -1,0 +1,23 @@
+#!/bin/bash
+
+#appname=`ps -ef | awk '$0 ~ /java/{for(i=1;i<=NF;i++){if($i ~ /-Djboss\.server\.home\.dir=/ || $i ~ /-Djetty\.home/){split($i,array,"/");print array[4];exit}}}'`
+appname=`ps -ef | awk '$0 ~ /java/{for(i=1;i<=NF;i++){if($i ~ /\/home\/admin\/.*\/\.default/){split($i,array,"/");print array[4];exit}}}'`
+
+if [ -n "$appname" ];then
+    apppath="/home/admin/$appname"
+    package_dir=`ls "$apppath/target" | grep  -m 1 -E  '(\.war|\.spring)$'`
+    find_dir="$apppath/target/$package_dir/WEB-INF/lib/"
+    if [ -e "$find_dir" ];then
+        result=`ls $find_dir | awk -F'-' '$1 ~ /^config$/ && $2 ~ /\<client\>/{content=$3;for(i=4;i<=NR;i++)content=content"-"$i;print substr(content,1,index(content,".jar")-1);exit}'`
+        if [ -n "$result" ];then
+            echo "[$result]";
+        else
+            echo "[null]"
+        fi
+    else
+        echo "[null]"
+    fi
+else
+    echo "[null]"
+fi
+

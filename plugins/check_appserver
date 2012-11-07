@@ -1,0 +1,45 @@
+#!/bin/bash
+
+APPSERVER_PIDS=$(pgrep -d ' ' java)
+
+for jpid in $APPSERVER_PIDS
+do
+    JETTY_HOME=$(ps h -p $jpid -ocmd | grep -F  -- ' -Djetty.home=' | grep -v grep |  sed 's/^.* -Djetty\.home=\(\S*\).*$/\1/')
+    if [ -z "$JETTY_HOME" ]
+    then
+        JBOSS_RUN=$(ps h -p $jpid -ocmd | grep -- '-Djboss.server.home' | sed -r 's&^.*[: ](([: ]|[[:graph:]]+/)run.jar)[: ].*$&\1&')
+    else
+         VERSION=$(cd $JETTY_HOME/lib/ && ls | sed -nr  '/^jetty-server-([^-]+)\.[^\.]+\.jar$/{s//\1/;p;q}')
+         if [ -n "$VERSION" ] && ! expr match "$APPSERVER_JETTY" "<$VERSION>" &>/dev/null
+         then
+             APPSERVER_JETTY="$APPSERVER_JETTY<$VERSION>"
+         fi
+         continue
+    fi
+    if [ -n "$JBOSS_RUN" ]
+    then
+           JAVA=$(ps h -p $jpid -ocommand | sed -e 's/ .*$//g')
+           if [ -z "$JAVA" ]
+           then
+                 continue
+           fi
+           VERSION=$($JAVA -jar $JBOSS_RUN -V 2>&1 | sed -r 's/^([^(]*) \(.*\).*$/\1/;q')
+           if [ -n "$VERSION" ] && ! expr match "$APPSERVER_JBOSS" "<$VERSION>" &>/dev/null
+           then
+                APPSERVER_JBOSS="$APPSERVER_JBOSS<$VERSION>"
+           fi
+    fi
+done
+
+if [ -z "$APPSERVER_JETTY" ]
+then
+       APPSERVER_JETTY=null
+fi
+
+if [ -z "$APPSERVER_JBOSS" ]
+then
+       APPSERVER_JBOSS=null
+fi
+
+echo "[$APPSERVER_JETTY]","[$APPSERVER_JBOSS]"
+

@@ -1,0 +1,745 @@
+#!/home/admin/install/perl/bin/perl
+###############################################################################################
+# Author          : yunxing - yunxing.cyx
+#
+# Last modified   : 2012-09-21 15:01, check SSH's STDERR info, if error  ocurred , stop 
+#                 : 2011-12-28 16:53
+#
+# Function        : check application's status 
+#
+# Usage           :
+#                   appcheck [-h|-help]  nodegroup [ -s ]  [ -a ] -mem -cpu -net -qps ..
+#                   -a  all machines include working_offline statu ones
+#                   -s  sigle IDC 
+#                   -h  help info ,eg : appcheck -h wwpartner -common
+#                   -common / -sysinit ... the options select to use ... , you can choose server at a time
+#                   ... more information pls run ./appcheck --help
+#
+################################################################################################
+
+
+use strict;
+use warnings;
+#use  Net::SSH::Perl;
+use  Net::OpenSSH;
+use  Getopt::Long;
+use  threads;
+use  threads::shared;
+use  IPC::Open2;
+use  File::Basename;
+use  feature "switch";
+use  IO::Select;
+
+
+#$Net::OpenSSH::debug |=63;
+
+# -- auto flush -- #
+$|=1;
+
+
+##  ------------------------------ varaible define ----------------------------------##
+
+use constant NGETHOST => '/home/admin/bin/ngethost.sh';
+use constant PLUGIN_PATH => '/home/admin/confsvn/bin/appcheck/plugins/';
+use constant MAX_THREADS => 200;
+use constant ERR_NOERROR => 0;
+use constant ERR_CONNECT => 1;
+use constant ERR_RUNCOMMAND => 2;
+
+
+my %ssh_options=(
+             master_stderr_discard => 1,
+             master_opts           => [ '-o' => "ConnectTimeout=5", '-o' => 'StrictHostKeyChecking=no'],
+             kill_ssh_on_timeout   => 1,
+             timeout               => 3,
+             batch_mode            => 1,
+             user                  => "admin",
+                  
+   );
+my @hosts;
+my %opt_cmd;
+my %options_hash;
+my @opts;
+my @thrd;
+
+my ($color_begin,$color_end)=("\e[0;31m","\e[0m");
+my $color_block="\e[0;37;1m";
+my ($color_max,$color_min)=("\e[0;33;1m","\e[0;32;1m");
+my ($color_header,$color_prompt,$color_host,$color_split)=("\e[0;34;4;1m","\e[0;37;1m","\e[0;36;1m","\e[0;34;1m");
+
+my @arguments;
+
+my $seprator_save=$/;
+my %host_result:shared;
+my %opt_array_true=(
+            "common"            => 11,
+            "cpu"               => 0,
+            "mem"               => 0,
+            "preload"           => 0,
+            "sysinit"           => 0,
+            "proc"              => 0,
+            "load"              => 0,
+            "net"               => 6,
+            "qps"               => 0,
+            "os"                => 3,
+            "lang"              => 0,
+            "jdk"               => 0,
+            "webserver"         => 2,
+            "appserver"         => 2,
+            "tddl"              => 0,
+            "hsf"               => 0,
+            "diamond"           => 0,
+            "configserver"      => 0,
+            "notify"            => 0,
+            "rcheckcode"        => 0,
+            "tbsession"         => 0,
+            "uptime"            => 0,
+   );
+my %header=(
+	"common"             => "-load- -cpu/u-  -mem/f-  -iowait-  -Trf/in- -Trf/out-  -https-  -javas-   -netEst-   -netTwt-   -qps-",
+	"cpu"                => "-cpu-",
+	"mem"                => " -mem/f-",
+	"proc"               => "-proc-",
+	"sysinit"            => "    -sysinit-    ",
+	"load"               => " -load-",
+	"preload"            => "-preload[ms]-",
+	"net"                => " -Trf/in- -Trf/out- -ESTABB- -TIMEWAIT- -CLOSEWAIT -SYNRCV-",
+	"qps"                => "  -QPS-  ",
+	"os"                 => "   -Arch-            -Os-               -Kernel-      ",
+	"lang"               => "    -LANG-     ",
+	"jdk"                => "     -jdk-     ",
+	"webserver"          => "       -Apache-                 -Nginx-      ",
+	"appserver"          => "      -Jetty-               -Jboss-     ",
+        "tddl"               => " -tddl- ",
+        "hsf"                => "  -hsf- ",
+        "configserver"       => "-cfgsrv-",
+        "diamond"            => "-diamond-",
+        "notify"             => "-notify-",
+        "rcheckcode"         => "-rcheckcode-",
+        "tbsession"          => "-tbsession-",
+        "uptime"             => "   -uptime-   ",
+	);
+my %opt_print_format=(
+	"common" => ["%5.2f","%5.2f","%7.2f","%6.2f","%7.2f","%7.2f","%7.2f","%7.2f","%7.2f","%7.2f","%7.2f"],
+	"cpu"    => "%5.2f",
+	"mem"    => "%7.2f",
+	"proc"   => "%7.2f",
+	"load"   => "%5.2f",
+	"preload"=> "%12d",
+	"net"    => ["%7.2f","%7.2f","%7.2f","%7.2f","%7.2f","%7.2f"],
+	"qps"    => "%7.2f",
+        "uptime" => "%16d",
+	);
+my %opt_print_format_str=(
+	"common"              => ["%6s","%6s","%8s","%8s","%8s","%8s","%8s","%8s","%8s","%8s","%8s"],
+	"cpu"                 => "%6s",
+	"mem"                 => "%8s",
+	"proc"                => "%8s",
+	"sysinit"             => "%17s",
+	"load"                => "%6s",
+	"preload"             => "%13s",
+	"net"                 => ["%8s","%8s","%8s","%8s","%8s","%8s"],
+	"qps"                 => "%8s",
+	"os"                  => ["%10s","%19s","%17s"],
+	"lang"                => "%15s",
+	"jdk"                 => "%15s",
+	"webserver"           => ["%19s","%19s"],
+	"appserver"           => ["%19s","%19s"],
+	"tddl"                => "%10s",
+	"hsf"                 => "%10s",
+	"configserver"        => "%10s",
+	"diamond"             => "%10s",
+	"notify"              => "%10s",
+	"rcheckcode"          => "%13s",
+	"tbsession"           => "%13s",
+	"uptime"              => "%16s",
+	);
+
+
+##
+# --------------------  Main routing ----------------------- # 
+
+##
+
+@arguments=@ARGV;
+
+my ($ngethost,$idc,$help,$all_status,$hosts_file,$outputfile,@nodegroups,$gather_cmd);
+
+GetOptions(
+		"help:s"            => \$help,
+		"single-idc|s=s"    => \$idc,
+		"ngethost|n"        => \$ngethost,
+		"all-status|a"      => \$all_status,
+		"hosts-file|f=s"    => \$hosts_file,
+		"nodegroups|g=s{,}" => \@nodegroups,
+                "outfile|o=s"       => \$outputfile,
+		"common:s"          => \$options_hash{common},
+		"cpu=s"             => \$options_hash{cpu},
+		"mem:s"             => \$options_hash{mem},
+		"proc=s"            => \$options_hash{proc},
+		"<>"                => \&get_param_for_proc,
+		"preload=s"         => \$options_hash{preload},
+		"load:f"            => \$options_hash{load},
+		"sysinit=s"         => \$options_hash{sysinit},
+		"net:s"             => \$options_hash{net},
+		"qps:s"             => \$options_hash{qps},
+		"os"                => \$options_hash{os},
+		"lang"              => \$options_hash{lang},
+		"jdk"               => \$options_hash{jdk},
+		"webserver"         => \$options_hash{webserver},
+		"appserver"         => \$options_hash{appserver},
+		"tddl"              => \$options_hash{tddl},
+		"hsf"               => \$options_hash{hsf},
+		"configserver"      => \$options_hash{configserver},
+		"diamond"           => \$options_hash{diamond},
+		"notify"            => \$options_hash{notify},
+		"rcheckcode"        => \$options_hash{rcheckcode},
+		"tbsession"         => \$options_hash{tbsession},
+		"uptime=s"          => \$options_hash{uptime},
+		
+	) or &Usage(); 
+
+
+# ------------------ paser self options -------------------- #
+
+
+# -- --help -- #
+
+&Usage($help) if defined $help;
+
+# -- argument miss -- #
+
+&Usage() unless $hosts_file or scalar @nodegroups;
+
+# -- color select -- #
+
+if($outputfile){
+   $color_begin="";   
+   $color_end="";   
+}
+
+# -- prepare arguments array -- #
+
+for(my $i=0;$i<@arguments;$i++) 
+{
+    $arguments[$i] =~ s/^-// || $arguments[$i] =~ s/^[^-]/-$&/; 
+}
+# -- --hosts-file/-f -- #
+
+if($hosts_file){
+    open(HF,"<$hosts_file") or die "$color_begin  Open file failed$color_end  : $hosts_file";
+    $/=undef;
+    $_=<HF>;
+    close(HF);
+    $/=$seprator_save;
+    push @hosts,split(/\s+/);  
+}
+
+# -- --ngethost/-n , --all-status/-a , --single-idc/-s -- #
+
+if(@nodegroups){
+
+    if(defined($ngethost)){
+        $gather_cmd  =NGETHOST;
+    }else{
+        $gather_cmd  = " -s $idc" if $idc;
+        $gather_cmd .= " -S working_online " unless $all_status;
+        $gather_cmd  = " armory -el --split ' ' $gather_cmd -g ";
+    }
+
+# -- gather hosts from each nodegroup -- #
+    foreach my $ngp (@nodegroups){
+        my $hostlist=`$gather_cmd $ngp 2>/dev/null </dev/null`;
+        chomp($hostlist);
+        if($hostlist eq "$ngp" or $hostlist eq "no result(s) returned" ){
+            print STDERR "$color_begin nodegroup has no hosts$color_end \n";
+            next;
+        }
+        push @hosts,split(/\s+/,$hostlist);
+    }
+}
+
+unless(@hosts){
+    print STDERR "$color_begin no hosts to do$color_end \n"; 
+    exit 0;
+}
+
+
+# -- parse Funtion options -- #
+foreach my $opt (keys %options_hash){
+
+    unless(defined $options_hash{$opt}){
+        next;
+    }
+
+    if (open(SCRIPT, PLUGIN_PATH . 'check_' . $opt)){
+        $/=undef;
+        $opt_cmd{$opt}=<SCRIPT>;
+        close(SCRIPT);
+        $/=$seprator_save;
+        push(@opts,$opt);
+    }else{
+        print STDERR "$color_begin invalid option: $opt, skip$color_end \n";
+        delete $opt_cmd{$opt};
+    }
+
+}
+
+unless(%opt_cmd){
+    print STDERR "$color_begin No funtion to do$color_end \n";
+    &Usage();
+}
+
+# ---------------- create share variable ----------------- #
+
+foreach my $host (@hosts,"min","max","avg"){
+    $host_result{$host}=shared_clone({});
+    foreach my $opt (@opts){
+        if($opt_array_true{$opt}){
+            $host_result{$host}{$opt}=shared_clone([1..$opt_array_true{$opt}]);
+        }
+    }
+}
+
+# ---------------- create ssh command -------------------- #
+
+$ssh_options{key_path} =  PLUGIN_PATH . 'id_rsa'  if $ENV{'USER'} ne "admin";
+
+# ---------------- create threads ------------------------ #
+
+# --- set SIGPIPE handler -------#
+# ignore SIGPIPE:
+# otherwise it will exit the proc
+# -------------------------------#
+$SIG{PIPE}='IGNORE';
+
+
+my $h_index=0;
+
+for(;;){
+
+    my @thrd=();
+
+    for(my $i=0;$i<MAX_THREADS;$i++){
+        last unless defined($hosts[$h_index+$i]);
+        my $t=threads->create(\&execute_functions,$hosts[$h_index+$i]);
+        push(@thrd,$t);
+    }
+
+
+    # --------------- join ------------------- #
+
+    my $thrd_num = @thrd;
+
+    last if $thrd_num < 1;
+
+    my @list=();
+
+    do{
+        @list=threads->list(threads::joinable);
+
+    } while ($thrd_num > @list);
+
+    for(my $i=0;$i<$thrd_num;$i++){
+        my $retval=$thrd[$i]->join();
+        use feature "switch";
+        given($retval){
+            when(ERR_CONNECT) {print STDERR "$color_begin  $hosts[$i] $color_end  : Connect failed \n";}
+            when(ERR_RUNCOMMAND) {print STDERR "$color_begin  $hosts[$i] $color_end  : Run command failed \n";}
+        }
+    }
+
+    $h_index += $thrd_num;
+}
+
+# ---------if write file to file ,just rwrite to file---- #
+
+if($outputfile){
+    exit &write_result_file($outputfile);
+}
+
+# -------------- result process ------------------------- #
+# foreach colum, express max,avg,min:
+# set max color->yellow
+# set min color->green
+# ------------------------------------------------------- #
+
+&compare_hash();
+
+
+# ------------- format output --------------------------- #
+
+
+&display_result();
+
+
+#print "Done.\n";
+
+exit(0);
+
+## ------------------------------------ function define -------------------------------------- #
+
+sub get_param_for_proc(){
+    $options_hash{proc}=$options_hash{proc}." $_[0]";
+}
+
+# -- help function -- #
+
+sub Usage(){
+    &help_info($_[0]) if $_[0];
+    print <<EOF 
+${color_begin}appcheck --help [ function1 ]  $color_end
+${color_begin}appcheck [OPTIONS] FUNCTION-LIST $color_end
+    ${color_begin}OPTIONS:$color_end
+    $color_block-f , --hosts-file FILE$color_end\tspecifiy hosts-file which contain hosts split by WIHTE-SPACE
+    $color_block-g , --nodegroups GROUP1 ...$color_end\tspecifiy nodgroups 
+    $color_block-s , --single-idc IDC$color_end\tonly process IDC's hosts, this option together with `-g' option
+    $color_block-a , --all-status $color_end\tselect all of the nodegroup's hosts, this options together with `-g' option
+    $color_block-n , --ngethost $color_end\tuse ngethost.sh to gather hosts instead of armory, if this option used, `-a' and `-s' will be ignore
+
+    ${color_begin}FUNCTIONS:$color_end
+
+EOF
+    ;
+
+    my $dirhd;
+    if(!opendir($dirhd,PLUGIN_PATH))
+    {
+        print STDERR 
+        "\n\t".$color_begin."No plugin dir " . PLUGIN_PATH . " : ($!)".$color_end."\n";
+        exit 1;
+    }
+    while(readdir($dirhd))
+    {
+        print "\t".$color_block.$_.$color_end . "\n" if s/^check_/-/;
+    }
+    closedir($dirhd);
+    exit(0);
+}
+
+# -- show function's help -- #
+
+sub help_info(){
+    if ( -e PLUGIN_PATH . "check_" . $_[0]) {
+        system(PLUGIN_PATH . "check_" . $_[0] . " -h");
+    }else{
+        print "\n\t\t Option unexist : " . $_[0];
+    }
+    exit(0);
+}
+
+# -- display pretty -- #
+sub look_well{
+    #my ($value,$format)=@_;
+    if($_[0] >= 10*1000**3){
+        $_[0]/=1024**3;
+        return sprintf($_[1],$_[0])."g";
+    }	
+    if($_[0] >= 10*1000**2){
+        $_[0]/=1024**2;
+        return sprintf($_[1],$_[0])."m";
+    }
+    if($_[0] >= 10*1000){
+        $_[0]/=1024;
+        return sprintf($_[1],$_[0])."k";
+    }
+    return sprintf($_[1],$_[0])." ";
+}
+
+# -- connect host and run plugin's shell script -- #
+
+sub  execute_functions
+{
+    my $host=shift 
+        or die "execute_function need 1 argument but give ZERO\n";
+
+    my ($ssh_in,$ssh_out,$ssh_err,$pid);
+
+    my $error=ERR_NOERROR;
+
+    my $ssh=Net::OpenSSH->new($host,%ssh_options);
+    if($ssh->error){
+        $error = ERR_CONNECT;
+    }else{
+        ($ssh_in,$ssh_out,$ssh_err,$pid)=$ssh->open3({},'bash') ;
+        #print $ssh_in "echo hello >&2\n";
+        my $slct=IO::Select->new($ssh_err);
+        if(my @ready = $slct->can_read(0.1)){
+            $error = ERR_RUNCOMMAND;
+        }
+    }
+
+    # -- if error ocurr -- #
+    if($error != ERR_NOERROR){
+        #print "error occur \n";
+        foreach my $opt (@opts){
+            if($opt_array_true{$opt}){
+                @{$host_result{$host}{$opt}}=('--') x $opt_array_true{$opt};
+            }else{
+                $host_result{$host}{$opt}="--";
+            }
+        }
+        return $error;
+    }
+
+
+    # -- clean output -- #
+    # **MAY CAUSE SIGPIPE**
+    print $ssh_in "echo __FLUSH__\n";
+    while(<$ssh_out>) {last if /__FLUSH__/;}
+
+    #print "Run --- \n";
+
+    # -- begin to run command -- #
+    foreach my $opt (@opts){
+        if($options_hash{$opt}){
+            print $ssh_in "set " . $options_hash{$opt} . " \n" . $opt_cmd{$opt} . " shift \$# \n";
+        }else{
+            print $ssh_in $opt_cmd{$opt};
+        }
+
+        if($_=<$ssh_out>){
+            chomp;
+            if($opt_array_true{$opt}){
+                @{$host_result{$host}{$opt}}=split(/,/);
+            }else{
+                $host_result{$host}{$opt}=$_;
+            }
+        }else{ # --- output invalid, may be pipe is broken
+            if($opt_array_true{$opt}){
+                @{$host_result{$host}{$opt}}=('--') x $opt_array_true{$opt};
+            }else{
+                $host_result{$host}{$opt}='--';
+            }
+        }
+    }
+
+    # -- end of run command -- #
+    print $ssh_in "exit \n";
+
+    close($ssh_in);
+    close($ssh_out);
+    close($ssh_err);
+
+    return 0;
+}
+
+# -- ARRAY[a colum] result analysis : color, max , min , avg -- #
+
+sub compare_array
+{
+    my $opt=shift
+        or die "compare_array need 1 arguments but give ZERO\n";
+    my $opt_rslt;
+
+    for(my $i=0;$i<$opt_array_true{$opt};$i++){
+        my ($max,$min,$total,$min_index,$max_index);
+        my $num=0;
+        foreach my $host (@hosts){
+            $opt_rslt=\@{$host_result{$host}{$opt}};
+            if($opt_rslt->[$i] eq '--'){
+                $opt_rslt->[$i]=sprintf($opt_print_format_str{$opt}[$i],'-- ');	
+                next;
+            }
+            if($opt_rslt->[$i] =~ /^\[.*/){
+                $opt_rslt->[$i]=sprintf($opt_print_format_str{$opt}[$i],$opt_rslt->[$i]);	
+                next;
+            }
+            unless(defined($max)){
+                $max=$min=$total=$opt_rslt->[$i];
+                $max_index=$min_index=$host;
+                $num+=1;
+                $opt_rslt->[$i]=&look_well($opt_rslt->[$i],$opt_print_format{$opt}[$i]);
+                next;
+            }
+            if($max < $opt_rslt->[$i]){
+                $max=$opt_rslt->[$i]; 
+                $max_index=$host;
+            }elsif($min > $opt_rslt->[$i]){
+                $min=$opt_rslt->[$i];
+                $min_index=$host;
+            }
+            $total+=$opt_rslt->[$i];
+            $opt_rslt->[$i]=&look_well($opt_rslt->[$i],$opt_print_format{$opt}[$i]);
+            $num+=1;
+
+        }
+        if(defined($max)){
+            if($min != $max){
+                $host_result{$max_index}{$opt}[$i]=$color_max.$host_result{$max_index}{$opt}[$i].$color_end;
+                $host_result{$min_index}{$opt}[$i]=$color_min.$host_result{$min_index}{$opt}[$i].$color_end;		
+            }
+            $host_result{"avg"}{$opt}[$i]=&look_well(($total+0.00)/$num,$opt_print_format{$opt}[$i]);
+            $host_result{"max"}{$opt}[$i]=&look_well($max,$opt_print_format{$opt}[$i]);
+            $host_result{"min"}{$opt}[$i]=&look_well($min,$opt_print_format{$opt}[$i]);
+
+        }else{
+            $host_result{"min"}{$opt}[$i]=$host_result{"max"}{$opt}[$i]=$host_result{"avg"}{$opt}[$i]=sprintf($opt_print_format_str{$opt}[$i],"-- ");
+
+        }
+    }
+
+}
+
+# -- HASH[ multi colum ] result analysis : color, max , min , avg -- #
+
+sub compare_hash{
+    my $opt_rslt;
+    foreach my $opt (@opts){
+        if($opt_array_true{$opt}){
+            compare_array($opt);
+            next;
+        }
+        my ($max,$min,$total,$max_index,$min_index);
+        my $num=0;
+        foreach my $host (@hosts){
+            $opt_rslt=$host_result{$host}{$opt};
+            if($opt_rslt eq '--'){
+                $host_result{$host}{$opt}=sprintf($opt_print_format_str{$opt},'-- ');	
+                next;
+            }
+            if($opt_rslt =~ /\[.*/){
+                $host_result{$host}{$opt}=sprintf($opt_print_format_str{$opt},$opt_rslt);	
+                next;	
+            }
+            unless(defined($max)){
+                $total=$min=$max=$opt_rslt;
+                $max_index=$min_index=$host;
+                $num+=1;
+                $host_result{$host}{$opt}=&look_well($opt_rslt,$opt_print_format{$opt});	
+                next;
+            }	
+            if($max < $opt_rslt){
+                $max=$opt_rslt;
+                $max_index=$host;
+            }elsif ($min > $opt_rslt){
+                $min=$opt_rslt;
+                $min_index=$host;
+            }
+            $total+=$opt_rslt;
+            $host_result{$host}{$opt}=&look_well($opt_rslt,$opt_print_format{$opt});	
+            $num+=1;
+        }
+        if(defined($max)){
+            $host_result{"avg"}{$opt}=&look_well($total/$num,$opt_print_format{$opt});
+            $host_result{"max"}{$opt}=&look_well($max,$opt_print_format{$opt});
+            $host_result{"min"}{$opt}=&look_well($min,$opt_print_format{$opt});
+            if($min != $max){
+                $host_result{$max_index}{$opt}=$color_max.$host_result{$max_index}{$opt}.$color_end;
+                $host_result{$min_index}{$opt}=$color_min.$host_result{$min_index}{$opt}.$color_end;
+            }
+        }else{
+            $host_result{"avg"}{$opt}=sprintf($opt_print_format_str{$opt},"-- ");
+            $host_result{"max"}{$opt}=$host_result{"avg"}{$opt};
+            $host_result{"min"}{$opt}=$host_result{"avg"}{$opt};
+        }
+    }
+}
+
+
+# -- display -- #
+
+
+sub display_result(){
+
+    my $w = @hosts < 9   ? 1:
+    @hosts < 99  ? 2:
+    @hosts < 999 ? 3: 4 ;
+
+    # ------------- print Header --------------------- #
+    printf "\n%$w"."s".$color_prompt."=========Appcheck-for========".$color_end." ", "=";
+
+    foreach my $opt (@arguments){
+        next if $opt =~ m/^-/;
+        unless(grep(/^${opt}$/,@opts)){
+            $opt =~ s/^./-$&/;
+            next;
+        }
+        printf $color_header."%s".$color_end." " ,$header{$opt};
+    }
+
+    print "\n\n";	
+
+    # ------------- print foreach host ---------------- #
+    my $i=1;
+    foreach my $host (@hosts){
+        my $rslt=\%{$host_result{$host}};
+        printf "%$w"."d -> ".$color_host."%25s".$color_end." ", $i,$host;
+        foreach my $opt (@arguments){
+            next if $opt =~ m/^-/;
+            if($opt_array_true{$opt}){
+                print  join("$color_split | $color_end",@{$rslt->{$opt}});
+            }else{	
+                print  $rslt->{$opt};
+            }
+            print $color_split." | ".$color_end;
+        }			
+        print "\n";
+        $i++;
+    }		
+
+    # -------------- print summary ------------------- #
+    printf "%$w"."s-----------------------------\n", "-";
+    # -- max , min , avg -- #
+    foreach my $item ("max","min","avg"){
+        my $rslt=\%{$host_result{$item}};
+        printf "%$w"."s -> ".$color_host."%25s".$color_end." ", " ",$item;
+        foreach (@arguments){
+            next if m/^-/;
+            if($opt_array_true{$_}){
+                print  join("$color_split | $color_end",@{$rslt->{$_}});
+            }else{	
+                print  $rslt->{$_};
+            }
+            print $color_split." | ".$color_end;
+        }			
+        print "\n";
+        $i++;
+    }		
+}
+
+# ------------------ write result to file -------------------#
+
+sub write_result_file()
+{
+    my $file=shift 
+        or die "${color_begin}result file unsupply!$color_end\n";
+
+    open RF,">>$file" 
+        or die $color_begin."Open file filed".$color_end." : ".$file;
+
+    ## title: -----------------------------
+    #  #Host"option1"option2"option3 ...
+    ## ------------------------------------
+    print RF '#Host';
+
+    foreach my $opt (@arguments){
+        next if $opt =~ m/^-/;
+        if(!grep(/^${opt}$/,@opts)){
+            $opt =~ s/^./-$&/;
+            next;
+        }
+        print RF '"' . $header{$opt};
+    }
+    print RF "\n";
+
+    ## Data: -------------------------------
+    # wwwebhost.cm3"20"[2.6.32]"[null] ...
+    ## -------------------------------------
+    foreach my $host (@hosts){
+        my $rslt=\%{$host_result{$host}};
+        print RF $host;
+        foreach my $opt (@arguments){
+            next if $opt =~ m/^-/; 
+            if($opt_array_true{$opt}){
+                print RF '"' . join('"',@{$rslt->{$opt}});
+            }else{
+                print RF '"' . $rslt->{$opt};
+            }
+        }
+        print RF "\n";
+    }
+    close(RF);
+}
+
+# ------------------------- End function define ----------------- #

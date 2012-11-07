@@ -1,0 +1,61 @@
+#!/bin/bash
+#####################################################
+# Author          : yunxing - yunxing.cyx
+# Last modified   : 2011-12-28 16:53
+# Function        : show net info of machine : traffice,ESTABLISHED,TIME_WAIT,CLOSE_WAIT,SYNC_RECV
+# Usage           : 
+#                    check_net [-h] [now]
+#                    now : get current net traffic
+#####################################################
+
+LANG=C
+
+if [ $# -ge 1 ] 
+then
+	if [ "x$1" = "x-h" ]
+	then
+		echo "-net [now]"
+		exit 0
+	fi
+	now=1
+else
+	now=" -s `date -d '-20 min' +%H:%M:%S`"
+	
+fi
+
+#echo "$#:$now" >/tmp/ch__Ok
+
+function gettraffic(){
+	traffic=`/usr/bin/sar -n DEV $now  | grep -v sit0 | grep -v lo |grep -v Average |sed -e '/^ *$/d' | tail -1 | awk '{printf "%d,%d",8*$(NF-4),8*$(NF-3)}'`
+	if [ -z "$traffic" ]
+	then
+		traffic='[No-eth0]'
+	fi
+}
+
+
+
+function getESTS(){
+	NETESTS=`netstat -ant  | grep ESTAB -c`
+}
+
+function getTIMEWAITS(){
+	NETTIMEWAITS=`netstat -ant  | grep TIME_WAIT -c`
+}
+
+function getCLOSEWAIT(){
+	NETCLOSEWAITS=`netstat -ant  | grep CLOSE_WAIT -c`
+}
+
+function getSYNRECV(){
+	NETSYNRECVS=`netstat -ant | grep SYN_RECV -c`
+}
+
+gettraffic
+getESTS
+getTIMEWAITS
+getCLOSEWAIT
+getSYNRECV
+
+
+echo $traffic,$NETESTS,$NETTIMEWAITS,$NETCLOSEWAITS,$NETSYNRECVS
