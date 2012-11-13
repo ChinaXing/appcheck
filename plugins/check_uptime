@@ -20,7 +20,7 @@ fi
 
 if [ "x$1" = "x-h" ]
 then
-    echo uptime -[t|d] 
+    echo uptime -"[t|d]" 
     echo "      "-t : up days and boot time
     echo "      "-d : up days
     exit 0
