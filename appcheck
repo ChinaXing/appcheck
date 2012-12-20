@@ -2,7 +2,8 @@
 ###############################################################################################
 # Author          : yunxing - yunxing.cyx
 #
-# Last modified   : 2012-09-21 15:01, check SSH's STDERR info, if error  ocurred , stop
+# Last modified   : 2012-12-20 12:40, add -H option to support host-list
+#                 : 2012-09-21 15:01, check SSH's STDERR info, if error  ocurred , stop
 #                 : 2011-12-28 16:53
 #
 # Function        : check application's status
@@ -175,7 +176,8 @@ my %opt_print_format_str = (
 
 my (
   $ngethost,   $idc,        $help,       $all_status,
-  $hosts_file, $outputfile, @nodegroups, $gather_cmd
+  $hosts_file, $outputfile, @nodegroups, $gather_cmd,
+  @host_list,
 );
 
 GetOptions(
@@ -183,6 +185,7 @@ GetOptions(
   "single-idc|s=s"    => \$idc,
   "ngethost|n"        => \$ngethost,
   "all-status|a"      => \$all_status,
+  "host-list|H=s{,}"  => \@host_list,
   "hosts-file|f=s"    => \$hosts_file,
   "nodegroups|g=s{,}" => \@nodegroups,
   "outfile|o=s"       => \$outputfile,
@@ -222,20 +225,28 @@ GetOptions(
 
 # -- argument miss -- #
 
-&Usage() unless $hosts_file or scalar @nodegroups;
+&Usage() unless scalar @host_list or $hosts_file or scalar @nodegroups;
 
 # -- color select -- #
 
 if ($outputfile) {
-  $color_begin = "";
-  $color_end   = "";
+    $color_begin = "";
+    $color_end   = "";
 }
 
 # -- prepare arguments array -- #
 
-for (my $i = 0; $i < @arguments; $i++) {
-  $arguments[$i] =~ s/^-// || $arguments[$i] =~ s/^[^-]/-$&/;
-}
+#for (my $i = 0; $i < @arguments; $i++) {
+#    $arguments[$i] =~ s/^-// || $arguments[$i] =~ s/^[^-]/-$&/;
+#}
+map { s/^-// || s/^[^-]/-$&/ } @arguments;
+
+# -- --host-list/-H -- #
+
+#if (@host_list){
+#   push @hosts, @host_list;
+#}
+push @hosts,@host_list;
 
 # -- --hosts-file/-f -- #
 
@@ -412,6 +423,7 @@ sub Usage() {
 ${color_begin}appcheck --help [ function1 ]  $color_end
 ${color_begin}appcheck [OPTIONS] FUNCTION-LIST $color_end
     ${color_begin}OPTIONS:$color_end
+    $color_block-H , --host-list HOST1 ...$color_end\tspecifiy a list of host split by WIHTE-SPACE
     $color_block-f , --hosts-file FILE$color_end\tspecifiy hosts-file which contain hosts split by WIHTE-SPACE
     $color_block-g , --nodegroups GROUP1 ...$color_end\tspecifiy nodgroups 
     $color_block-s , --single-idc IDC$color_end\tonly process IDC's hosts, this option together with `-g' option
@@ -709,7 +721,6 @@ sub display_result() {
     unless (grep(/^${opt}$/, @opts)) {
       $opt =~ s/^./-$&/;
       next;
-657:	operator in print statement not recommended
     }
     printf $color_header. "%s" . $color_end . " ", $header{$opt};
   }
@@ -729,7 +740,6 @@ sub display_result() {
       }
       else {
         print $rslt->{$opt};
-674:	operator in print statement not recommended
       }
       print $color_split. "|" . $color_end;
     }
@@ -752,7 +762,6 @@ sub display_result() {
       }
       else {
         print $rslt->{$_};
-693:	operator in print statement not recommended
       }
       print $color_split. "|" . $color_end;
     }
