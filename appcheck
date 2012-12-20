@@ -20,9 +20,7 @@
 
 
 use strict;
-
 #use warnings;
-#use  Net::SSH::Perl;
 use Net::OpenSSH;
 use Getopt::Long;
 use threads;
@@ -168,8 +166,7 @@ my %opt_print_format_str = (
 
 
 ##
-# --------------------  Main routing ----------------------- #
-
+## --------------------  Main routing ----------------------- #
 ##
 
 @arguments = @ARGV;
@@ -398,26 +395,23 @@ if ($outputfile) {
 
 &compare_hash();
 
-
 # ------------- format output --------------------------- #
 
-
 &display_result();
-
-
-#print "Done.\n";
 
 exit(0);
 
 ## ------------------------------------ function define -------------------------------------- #
 
-sub get_param_for_proc() {
+sub get_param_for_proc()
+{
   $options_hash{proc} = $options_hash{proc} . " $_[0]";
 }
 
 # -- help function -- #
 
-sub Usage() {
+sub Usage()
+{
   &help_info($_[0]) if $_[0];
   print <<EOF
 ${color_begin}appcheck --help [ function1 ]  $color_end
@@ -454,7 +448,8 @@ EOF
 
 # -- show function's help -- #
 
-sub help_info() {
+sub help_info()
+{
   if (-e PLUGIN_PATH . "check_" . $_[0]) {
     system(PLUGIN_PATH . "check_" . $_[0] . " -h");
   }
@@ -465,7 +460,8 @@ sub help_info() {
 }
 
 # -- display pretty -- #
-sub look_well {
+sub look_well
+{
 
   #my ($value,$format)=@_;
   if ($_[0] >= 10 * 1000**3) {
@@ -485,11 +481,12 @@ sub look_well {
 
 # -- connect host and run plugin's shell script -- #
 
-sub execute_functions {
-  my $host = shift or die "execute_function need 1 argument but give ZERO\n";
+sub execute_functions
+{
+  my $host = shift 
+      or die "execute_function need 1 argument but give ZERO\n";
 
   my ($ssh_in, $ssh_out, $ssh_err, $pid);
-
   my $error = ERR_NOERROR;
 
   my $ssh = Net::OpenSSH->new($host, %ssh_options);
@@ -572,8 +569,10 @@ sub execute_functions {
 
 # -- ARRAY[a colum] result analysis : color, max , min , avg -- #
 
-sub compare_array {
-  my $opt = shift or die "compare_array need 1 arguments but give ZERO\n";
+sub compare_array
+{
+  my $opt = shift 
+      or die "compare_array need 1 arguments but give ZERO\n";
   my $opt_rslt;
 
   for (my $i = 0; $i < $opt_array_true{$opt}; $i++) {
@@ -639,7 +638,8 @@ sub compare_array {
 
 # -- HASH[ multi colum ] result analysis : color, max , min , avg -- #
 
-sub compare_hash {
+sub compare_hash
+{
   my $opt_rslt;
   foreach my $opt (@opts) {
     if ($opt_array_true{$opt}) {
@@ -705,78 +705,84 @@ sub compare_hash {
 # -- display -- #
 
 
-sub display_result() {
+sub display_result()
+{
 
-  my $w = @hosts < 9 ? 1 : @hosts < 99 ? 2 : @hosts < 999 ? 3 : 4;
+    my $w = @hosts < 9 ? 1 : @hosts < 99 ? 2 : @hosts < 999 ? 3 : 4;
 
-  # ------------- print Header --------------------- #
-  printf "\n%$w" . "s"
+    # ------------- print Header --------------------- #
+    printf "\n%$w" . "s"
     . $color_prompt
     . "======Appcheck-for======"
     . $color_end
     . " ", "=";
 
-  foreach my $opt (@arguments) {
-    next if $opt =~ m/^-/;
-    unless (grep(/^${opt}$/, @opts)) {
-      $opt =~ s/^./-$&/;
-      next;
-    }
-    printf $color_header. "%s" . $color_end . " ", $header{$opt};
-  }
-
-  print "\n\n";
-
-  # ------------- print foreach host ---------------- #
-  my $i = 1;
-  foreach my $host (@hosts) {
-    my $rslt = \%{$host_result{$host}};
-    printf "%$w" . "d -> " . $color_host . "%20s" . $color_end . " ", $i,
-      $host;
     foreach my $opt (@arguments) {
-      next if $opt =~ m/^-/;
-      if ($opt_array_true{$opt}) {
-        print join("$color_split|$color_end", @{$rslt->{$opt}});
-      }
-      else {
-        print $rslt->{$opt};
-      }
-      print $color_split. "|" . $color_end;
+        next if $opt =~ m/^-/;
+        unless (grep(/^${opt}$/, @opts)) {
+            $opt =~ s/^./-$&/;
+            next;
+        }
+        printf $color_header. "%s" . $color_end . " ", $header{$opt};
     }
-    print "\n";
-    $i++;
-  }
 
-  # -------------- print summary ------------------- #
-  printf "%$w" . "s-----------------------------\n", "-";
+    print "\n\n";
 
-  # -- max , min , avg -- #
-  foreach my $item ("max", "min", "avg") {
-    my $rslt = \%{$host_result{$item}};
-    printf "%$w" . "s -> " . $color_host . "%20s" . $color_end . " ", " ",
-      $item;
-    foreach (@arguments) {
-      next if m/^-/;
-      if ($opt_array_true{$_}) {
-        print join("$color_split|$color_end", @{$rslt->{$_}});
-      }
-      else {
-        print $rslt->{$_};
-      }
-      print $color_split. "|" . $color_end;
+    # ------------- print foreach host ---------------- #
+    my $i = 1;
+    foreach my $host (@hosts)
+    {
+        my $rslt = \%{$host_result{$host}};
+        printf "%$w" . "d -> " . $color_host . "%20s" . $color_end . " ", $i, $host;
+        foreach my $opt (@arguments)
+        {
+            next if $opt =~ m/^-/;
+            if ($opt_array_true{$opt}) {
+                print join("$color_split|$color_end", @{$rslt->{$opt}});
+            }
+            else {
+                print $rslt->{$opt};
+            }
+            print $color_split. "|" . $color_end;
+        }
+        print "\n";
+        $i++;
     }
-    print "\n";
-    $i++;
-  }
+
+    # -------------- print summary ------------------- #
+    printf "%$w" . "s-----------------------------\n", "-";
+
+    # -- max , min , avg -- #
+    foreach my $item ("max", "min", "avg") 
+    {
+        my $rslt = \%{$host_result{$item}};
+        printf "%$w" . "s -> " . $color_host . "%20s" . $color_end . " ", " ",
+        $item;
+        foreach (@arguments) 
+        {
+            next if m/^-/;
+            if ($opt_array_true{$_}) {
+                print join("$color_split|$color_end", @{$rslt->{$_}});
+            }
+            else {
+                print $rslt->{$_};
+            }
+            print $color_split. "|" . $color_end;
+        }
+        print "\n";
+        $i++;
+    }
 }
 
 # ------------------ write result to file -------------------#
 
-sub write_result_file() {
-  my $file = shift or die "${color_begin}result file unsupply!$color_end\n";
+sub write_result_file()
+{
+    my $file = shift 
+        or die "${color_begin}result file unsupply!$color_end\n";
 
-  open RF, ">>$file"
-    or die $color_begin . "Open file filed" . $color_end . " : " . $file;
+    open RF, ">>$file"
+        or die $color_begin . "Open file filed" . $color_end . " : " . $file;
 
   ## title: -----------------------------
   #  #Host"option1"option2"option3 ...
